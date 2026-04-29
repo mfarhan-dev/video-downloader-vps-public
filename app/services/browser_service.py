@@ -248,7 +248,7 @@ class BrowserVideoService:
                 }
             """)
             if video_src and "blob:" not in video_src:
-                info["formats"].append(VideoFormat(quality="direct", format_id="video", ext="mp4", url=video_src))
+                info["formats"].append(VideoFormat(quality="direct", format_id="video", ext="mp4", url=video_src, protocol="https"))
         except Exception:
             pass
 
@@ -301,6 +301,7 @@ class BrowserVideoService:
                         format_id=str(fmt.get("itag", "unknown")),
                         ext=ext,
                         url=stream_url,
+                        protocol="https",
                     ))
 
                 logger.info("Browser extracted: %s direct URLs, %s signatureCiphers skipped | returning %s formats", direct_count, cipher_count, len(info["formats"]))
@@ -316,7 +317,7 @@ class BrowserVideoService:
                 u = vu["url"]
                 if "googlevideo" in u and "generate_204" not in u:
                     info["formats"].append(VideoFormat(
-                        quality="best", format_id="network", ext="mp4", url=u
+                        quality="best", format_id="network", ext="mp4", url=u, protocol="https"
                     ))
 
         return info
@@ -345,7 +346,7 @@ class BrowserVideoService:
                     info["duration"] = item.get("video", {}).get("duration")
                     play_addr = item.get("video", {}).get("playAddr", "")
                     if play_addr and "playback1" not in play_addr:
-                        info["formats"].append(VideoFormat(quality="HD", format_id="0", ext="mp4", url=play_addr))
+                        info["formats"].append(VideoFormat(quality="HD", format_id="0", ext="mp4", url=play_addr, protocol="https"))
         except Exception:
             pass
 
@@ -353,7 +354,7 @@ class BrowserVideoService:
         try:
             video_src = await page.evaluate("document.querySelector('video')?.src")
             if video_src and "playback1" not in video_src:
-                info["formats"].append(VideoFormat(quality="HD", format_id="video", ext="mp4", url=video_src))
+                info["formats"].append(VideoFormat(quality="HD", format_id="video", ext="mp4", url=video_src, protocol="https"))
         except Exception:
             pass
 
@@ -361,7 +362,7 @@ class BrowserVideoService:
         for vu in video_urls:
             u = vu["url"]
             if ".mp4" in u and "tiktok" in u and "playback1" not in u:
-                info["formats"].append(VideoFormat(quality="HD", format_id="network", ext="mp4", url=u))
+                info["formats"].append(VideoFormat(quality="HD", format_id="network", ext="mp4", url=u, protocol="https"))
 
         return info
 
@@ -376,7 +377,7 @@ class BrowserVideoService:
         try:
             video_src = await page.evaluate("document.querySelector('video')?.src")
             if video_src:
-                info["formats"].append(VideoFormat(quality="HD", format_id="0", ext="mp4", url=video_src))
+                info["formats"].append(VideoFormat(quality="HD", format_id="0", ext="mp4", url=video_src, protocol="https"))
         except Exception:
             pass
 
@@ -389,7 +390,7 @@ class BrowserVideoService:
                 }
             """)
             if meta_video:
-                info["formats"].append(VideoFormat(quality="HD", format_id="meta", ext="mp4", url=meta_video))
+                info["formats"].append(VideoFormat(quality="HD", format_id="meta", ext="mp4", url=meta_video, protocol="https"))
             meta_thumb = await page.evaluate("""
                 () => {
                     const meta = document.querySelector('meta[property=\"og:image\"]');
@@ -405,7 +406,7 @@ class BrowserVideoService:
         for vu in video_urls:
             u = vu["url"]
             if ".mp4" in u and "cdninstagram" in u:
-                info["formats"].append(VideoFormat(quality="HD", format_id="network", ext="mp4", url=u))
+                info["formats"].append(VideoFormat(quality="HD", format_id="network", ext="mp4", url=u, protocol="https"))
 
         return info
 
@@ -420,7 +421,7 @@ class BrowserVideoService:
         try:
             video_src = await page.evaluate("document.querySelector('video')?.src")
             if video_src:
-                info["formats"].append(VideoFormat(quality="HD", format_id="0", ext="mp4", url=video_src))
+                info["formats"].append(VideoFormat(quality="HD", format_id="0", ext="mp4", url=video_src, protocol="https"))
         except Exception:
             pass
 
@@ -433,7 +434,7 @@ class BrowserVideoService:
                 }
             """)
             if meta_video:
-                info["formats"].append(VideoFormat(quality="HD", format_id="meta", ext="mp4", url=meta_video))
+                info["formats"].append(VideoFormat(quality="HD", format_id="meta", ext="mp4", url=meta_video, protocol="https"))
         except Exception:
             pass
 
@@ -441,7 +442,7 @@ class BrowserVideoService:
         for vu in video_urls:
             u = vu["url"]
             if ".mp4" in u and ("fbcdn" in u or "facebook" in u):
-                info["formats"].append(VideoFormat(quality="HD", format_id="network", ext="mp4", url=u))
+                info["formats"].append(VideoFormat(quality="HD", format_id="network", ext="mp4", url=u, protocol="https"))
 
         return info
 
@@ -456,7 +457,7 @@ class BrowserVideoService:
         try:
             video_src = await page.evaluate("document.querySelector('video')?.src")
             if video_src and "blob:" not in video_src:
-                info["formats"].append(VideoFormat(quality="HD", format_id="0", ext="mp4", url=video_src))
+                info["formats"].append(VideoFormat(quality="HD", format_id="0", ext="mp4", url=video_src, protocol="https"))
         except Exception:
             pass
 
@@ -469,7 +470,7 @@ class BrowserVideoService:
                 }
             """)
             if meta_video:
-                info["formats"].append(VideoFormat(quality="HD", format_id="meta", ext="mp4", url=meta_video))
+                info["formats"].append(VideoFormat(quality="HD", format_id="meta", ext="mp4", url=meta_video, protocol="https"))
             meta_thumb = await page.evaluate("""
                 () => {
                     const meta = document.querySelector('meta[property=\"og:image\"]');
@@ -484,6 +485,6 @@ class BrowserVideoService:
         for vu in video_urls:
             u = vu["url"]
             if any(ext in u for ext in [".mp4", ".webm", ".m3u8"]):
-                info["formats"].append(VideoFormat(quality="HD", format_id="network", ext="mp4", url=u))
+                info["formats"].append(VideoFormat(quality="HD", format_id="network", ext="mp4", url=u, protocol="https"))
 
         return info

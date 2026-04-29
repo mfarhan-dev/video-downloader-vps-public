@@ -59,18 +59,18 @@ class VideoService:
         # Try multiple player_client strategies to get the most formats
         # YouTube serves different formats depending on client type and IP reputation
         strategies = [
-            # Strategy 1: web client (usually best quality selection)
-            {"extractor_args": {"youtube": {"player_client": ["web"]}}},
-            # Strategy 2: web + ios (ios often gets more formats)
-            {"extractor_args": {"youtube": {"player_client": ["web", "ios"]}}},
-            # Strategy 3: ios only (sometimes bypasses restrictions)
-            {"extractor_args": {"youtube": {"player_client": ["ios"]}}},
-            # Strategy 4: android + web (original config)
-            {"extractor_args": {"youtube": {"player_client": ["android", "web"]}}},
-            # Strategy 5: web_embedded (for embed player, sometimes different restrictions)
-            {"extractor_args": {"youtube": {"player_client": ["web_embedded"]}}},
-            # Strategy 6: no player_client restriction (yt-dlp auto-selects)
+            # Strategy 1: default (yt-dlp auto-selects, often gets m3u8 formats)
             {},
+            # Strategy 2: web client
+            {"extractor_args": {"youtube": {"player_client": ["web"]}}},
+            # Strategy 3: web + ios
+            {"extractor_args": {"youtube": {"player_client": ["web", "ios"]}}},
+            # Strategy 4: ios only
+            {"extractor_args": {"youtube": {"player_client": ["ios"]}}},
+            # Strategy 5: android + web
+            {"extractor_args": {"youtube": {"player_client": ["android", "web"]}}},
+            # Strategy 6: web_embedded
+            {"extractor_args": {"youtube": {"player_client": ["web_embedded"]}}},
         ]
 
         best_info = None
@@ -82,7 +82,7 @@ class VideoService:
             info = self._extract_with_opts(url, opts)
             if info:
                 raw_formats = info.get("formats", [])
-                # Count video formats (not audio-only)
+                # Count video formats (not audio-only) with playable URLs
                 video_count = sum(
                     1 for f in raw_formats
                     if f.get("vcodec") not in (None, "none") and f.get("url")
@@ -141,7 +141,7 @@ class VideoService:
         Rules:
         - Must have a direct URL
         - Must contain video (skip audio-only)
-        - Protocol must be http/https for direct download
+        - Protocol must be http/https/m3u8/m3u8_native for playback/download
         - Sort by resolution descending, then prefer mp4
         - Limit to top N formats
         """
@@ -157,7 +157,8 @@ class VideoService:
                 continue
 
             protocol = str(fmt.get("protocol", "")).lower()
-            if protocol not in ("http", "https"):
+            # Accept direct HTTP(S) and HLS streams
+            if protocol not in ("http", "https", "m3u8", "m3u8_native"):
                 continue
 
             ext = fmt.get("ext") or "mp4"
@@ -184,6 +185,7 @@ class VideoService:
                     "url": stream_url,
                     "height": height,
                     "is_mp4": ext.lower() == "mp4",
+                    "protocol": "m3u8" if protocol in ("m3u8", "m3u8_native") else protocol,
                 }
             )
 
@@ -198,6 +200,7 @@ class VideoService:
                     format_id=v["format_id"],
                     ext=v["ext"],
                     url=v["url"],
+                    protocol=v["protocol"],
                 )
             )
 

@@ -7,6 +7,7 @@ class VideoFormat(BaseModel):
     format_id: str
     ext: str
     url: str
+    protocol: str = "https"  # "https", "http", or "m3u8"
 
 
 class VideoInfo(BaseModel):

@@ -1,4 +1,6 @@
+import asyncio
 import logging
+import os
 
 import httpx
 from fastapi import APIRouter, HTTPException, Query
@@ -90,6 +92,76 @@ async def extract_video(
     return info
 
 
+async def _stream_https(url: str, headers: dict):
+    """Stream a direct HTTPS video URL via proxy."""
+    async with httpx.AsyncClient(
+        follow_redirects=True,
+        proxy="http://exwnzzqh:ib3jgwgkjyl1@31.59.20.176:6754",
+    ) as client:
+        async with client.stream("GET", url, headers=headers, timeout=120) as response:
+            if response.status_code >= 400:
+                logger.error("Upstream returned %s for %s", response.status_code, url)
+                raise HTTPException(
+                    status_code=502,
+                    detail=f"Upstream video source returned {response.status_code}",
+                )
+            async for chunk in response.aiter_bytes(chunk_size=8192):
+                yield chunk
+
+
+async def _stream_m3u8_via_ytdl(video_url: str, format_id: str):
+    """Download an HLS/m3u8 stream using yt-dlp and yield chunks."""
+    proxy = "http://exwnzzqh:ib3jgwgkjyl1@31.59.20.176:6754"
+    cmd = [
+        "yt-dlp",
+        "--proxy", proxy,
+        "-f", format_id,
+        "-o", "-",           # output to stdout
+        "--no-playlist",
+        "--no-warnings",
+        "--quiet",
+        "--compat-options", "no-live-chat",
+        video_url,
+    ]
+
+    # Add cookies if available
+    for cookies_path in ("/tmp/yt_cookies.txt", "/app/cookies.txt"):
+        if os.path.exists(cookies_path):
+            cmd.extend(["--cookies", cookies_path])
+            break
+
+    logger.info("Streaming m3u8 via yt-dlp: %s | format: %s", video_url, format_id)
+
+    proc = await asyncio.create_subprocess_exec(
+        *cmd,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+
+    try:
+        while True:
+            chunk = await proc.stdout.read(8192)
+            if not chunk:
+                break
+            yield chunk
+    except Exception as exc:
+        logger.error("Error streaming from yt-dlp: %s", exc)
+        proc.kill()
+        raise
+    finally:
+        if proc.returncode is None:
+            proc.kill()
+
+    await proc.wait()
+    if proc.returncode != 0:
+        stderr = await proc.stderr.read()
+        logger.error("yt-dlp download failed (code %s): %s", proc.returncode, stderr.decode()[:500])
+        raise HTTPException(
+            status_code=502,
+            detail="Failed to download HLS stream",
+        )
+
+
 @router.get("/download")
 async def download_video(
     url: str = Query(..., description="Video URL to download"),
@@ -99,6 +171,7 @@ async def download_video(
     Proxy-download a video format.
 
     Re-extracts fresh URLs on the server and streams the content back to the client.
+    Supports both direct MP4 and HLS/m3u8 streams.
     """
     url = url.strip()
     if not url.startswith(("http://", "https://")):
@@ -142,7 +215,6 @@ async def download_video(
 
         if attempt == 0:
             logger.info("Retrying extraction in 3 seconds...")
-            import asyncio
             await asyncio.sleep(3)
 
     if not info or not info.formats:
@@ -153,40 +225,38 @@ async def download_video(
     if not fmt:
         fmt = info.formats[0]
 
-    logger.info("Proxying download for: %s | format: %s | quality: %s", url, fmt.format_id, fmt.quality)
+    logger.info(
+        "Proxying download for: %s | format: %s | quality: %s | protocol: %s",
+        url, fmt.format_id, fmt.quality, fmt.protocol,
+    )
 
-    async def stream_generator():
-        headers = {
-            "User-Agent": (
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                "AppleWebKit/537.36 (KHTML, like Gecko) "
-                "Chrome/124.0.0.0 Safari/537.36"
-            ),
-            "Referer": "https://www.youtube.com/",
-            "Accept": "*/*",
-            "Accept-Language": "en-US,en;q=0.9",
-        }
-        async with httpx.AsyncClient(
-            follow_redirects=True,
-            proxy="http://exwnzzqh:ib3jgwgkjyl1@31.59.20.176:6754",
-        ) as client:
-            async with client.stream("GET", fmt.url, headers=headers, timeout=120) as response:
-                if response.status_code >= 400:
-                    logger.error("Upstream returned %s for %s", response.status_code, fmt.url)
-                    raise HTTPException(
-                        status_code=502,
-                        detail=f"Upstream video source returned {response.status_code}",
-                    )
-                async for chunk in response.aiter_bytes(chunk_size=8192):
-                    yield chunk
+    headers = {
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/124.0.0.0 Safari/537.36"
+        ),
+        "Referer": "https://www.youtube.com/",
+        "Accept": "*/*",
+        "Accept-Language": "en-US,en;q=0.9",
+    }
+
+    if fmt.protocol == "m3u8":
+        # HLS streams need yt-dlp to download
+        stream_gen = _stream_m3u8_via_ytdl(url, fmt.format_id)
+        media_type = "video/mp4"
+    else:
+        # Direct MP4/WebM streams
+        stream_gen = _stream_https(fmt.url, headers)
+        media_type = "video/mp4"
 
     # Sanitize filename
     safe_title = "".join(c for c in (info.title or "video") if c.isalnum() or c in " ._-").strip()
     filename = f"{safe_title}_{fmt.quality}.{fmt.ext}"
 
     return StreamingResponse(
-        stream_generator(),
-        media_type="video/mp4",
+        stream_gen,
+        media_type=media_type,
         headers={
             "Content-Disposition": f'attachment; filename="{filename}"',
         },

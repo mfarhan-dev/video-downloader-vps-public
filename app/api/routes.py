@@ -33,11 +33,11 @@ async def extract_video(
         )
 
     # Try yt-dlp first (fastest)
+    info = None
     try:
-        return await video_service.extract(url)
+        info = await video_service.extract(url)
     except ValueError as exc:
         error_msg = str(exc).lower()
-        # If bot detection or unsupported, try browser fallback
         if any(x in error_msg for x in ["bot", "sign in", "blocked", "unsupported", "confirm"]):
             logger.info("yt-dlp blocked, trying browser fallback for: %s", url)
         else:
@@ -52,24 +52,42 @@ async def extract_video(
     except Exception:
         logger.exception("Unexpected error during extraction for URL %s", url)
 
-    # Fallback to browser-based extraction
-    try:
-        return await browser_service.extract(url)
-    except RuntimeError as exc:
-        logger.error("Browser service not available: %s", exc)
-        raise HTTPException(status_code=503, detail=str(exc))
-    except ValueError as exc:
-        logger.warning("Browser extraction error for URL %s: %s", url, exc)
-        raise HTTPException(status_code=400, detail=str(exc))
-    except TimeoutError:
-        logger.warning("Browser extraction timeout for URL %s", url)
-        raise HTTPException(
-            status_code=504,
-            detail="Browser extraction timed out. Please try again later.",
-        )
-    except Exception:
-        logger.exception("Unexpected browser error during extraction for URL %s", url)
-        raise HTTPException(status_code=500, detail="Internal server error")
+    # Fallback to browser-based extraction (loads page and saves cookies)
+    if not info or not info.formats:
+        try:
+            browser_info = await browser_service.extract(url)
+            if browser_info and browser_info.formats:
+                info = browser_info
+        except RuntimeError as exc:
+            logger.error("Browser service not available: %s", exc)
+            raise HTTPException(status_code=503, detail=str(exc))
+        except ValueError as exc:
+            logger.warning("Browser extraction error for URL %s: %s", url, exc)
+            raise HTTPException(status_code=400, detail=str(exc))
+        except TimeoutError:
+            logger.warning("Browser extraction timeout for URL %s", url)
+            raise HTTPException(
+                status_code=504,
+                detail="Browser extraction timed out. Please try again later.",
+            )
+        except Exception:
+            logger.exception("Unexpected browser error during extraction for URL %s", url)
+            raise HTTPException(status_code=500, detail="Internal server error")
+
+        # Browser saved cookies — retry yt-dlp for ALL formats
+        if info and info.formats:
+            try:
+                logger.info("Retrying yt-dlp with browser cookies for: %s", url)
+                ytdl_info = await video_service.extract(url)
+                if ytdl_info and ytdl_info.formats:
+                    info = ytdl_info
+            except Exception as exc:
+                logger.info("yt-dlp with cookies failed, keeping browser result: %s", exc)
+
+    if not info or not info.formats:
+        raise HTTPException(status_code=404, detail="No formats available for this video")
+
+    return info
 
 
 @router.get("/download")
@@ -99,10 +117,20 @@ async def download_video(
         except Exception as exc:
             logger.info("yt-dlp extraction failed for download (attempt %s): %s", attempt + 1, exc)
 
-        # Fallback to browser
+        # Fallback to browser (saves cookies for yt-dlp)
         if not info or not info.formats:
             try:
-                info = await browser_service.extract(url)
+                browser_info = await browser_service.extract(url)
+                if browser_info and browser_info.formats:
+                    info = browser_info
+                    # Retry yt-dlp with fresh cookies for ALL formats
+                    try:
+                        logger.info("Retrying yt-dlp with browser cookies for download")
+                        ytdl_info = await video_service.extract(url)
+                        if ytdl_info and ytdl_info.formats:
+                            info = ytdl_info
+                    except Exception as exc2:
+                        logger.info("yt-dlp with cookies failed for download: %s", exc2)
             except RuntimeError as exc:
                 logger.error("Browser service not available: %s", exc)
                 raise HTTPException(status_code=503, detail=str(exc))

@@ -35,10 +35,11 @@ class VideoService:
             },
         }
         # Check for cookies file
-        cookies_path = "/app/cookies.txt"
-        import os
-        if os.path.exists(cookies_path):
-            ydl_opts["cookiefile"] = cookies_path
+        for cookies_path in ("/tmp/yt_cookies.txt", "/app/cookies.txt"):
+            import os
+            if os.path.exists(cookies_path):
+                ydl_opts["cookiefile"] = cookies_path
+                break
 
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             return ydl.extract_info(url, download=False)

@@ -9,6 +9,8 @@ from app.models.response_models import VideoFormat, VideoInfo
 
 logger = logging.getLogger(__name__)
 
+PROXY_URL = "http://exwnzzqh:ib3jgwgkjyl1@31.59.20.176:6754"
+
 
 class VideoService:
     """Handles video metadata extraction using yt-dlp."""
@@ -27,18 +29,15 @@ class VideoService:
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 return ydl.extract_info(url, download=False)
         except Exception as exc:
-            logger.debug("Extraction failed with opts %s: %s", ydl_opts.get("extractor_args"), exc)
+            logger.debug("Extraction failed: %s", exc)
             return None
 
-    def _extract_sync(self, url: str) -> dict[str, Any]:
-        """Synchronous wrapper around yt-dlp extract_info with multiple strategies."""
-        proxy = "http://exwnzzqh:ib3jgwgkjyl1@31.59.20.176:6754"
-
-        base_opts = {
+    def _build_opts(self, use_proxy: bool, strategy: dict) -> dict:
+        """Build yt-dlp options."""
+        opts = {
             "quiet": True,
             "no_warnings": True,
             "js_runtimes": {"node": {}},
-            "proxy": proxy,
             "user_agent": (
                 "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
                 "AppleWebKit/537.36 (KHTML, like Gecko) "
@@ -47,63 +46,75 @@ class VideoService:
             "referer": "https://www.youtube.com/",
             "geo_bypass": True,
         }
+        if use_proxy:
+            opts["proxy"] = PROXY_URL
 
         # Check for cookies file
         for cookies_path in ("/tmp/yt_cookies.txt", "/app/cookies.txt"):
             import os
             if os.path.exists(cookies_path):
-                base_opts["cookiefile"] = cookies_path
-                logger.info("Using cookies from %s", cookies_path)
+                opts["cookiefile"] = cookies_path
                 break
 
-        # Try multiple player_client strategies to get the most formats
-        # YouTube serves different formats depending on client type and IP reputation
+        opts.update(strategy)
+        return opts
+
+    def _extract_sync(self, url: str) -> dict[str, Any]:
+        """Synchronous wrapper around yt-dlp extract_info with multiple strategies."""
         strategies = [
-            # Strategy 1: default (yt-dlp auto-selects, often gets m3u8 formats)
             {},
-            # Strategy 2: web client
             {"extractor_args": {"youtube": {"player_client": ["web"]}}},
-            # Strategy 3: web + ios
             {"extractor_args": {"youtube": {"player_client": ["web", "ios"]}}},
-            # Strategy 4: ios only
             {"extractor_args": {"youtube": {"player_client": ["ios"]}}},
-            # Strategy 5: android + web
             {"extractor_args": {"youtube": {"player_client": ["android", "web"]}}},
-            # Strategy 6: web_embedded
             {"extractor_args": {"youtube": {"player_client": ["web_embedded"]}}},
         ]
 
+        # First: try WITHOUT proxy (VPS IP may be clean even if proxy is blocked)
         best_info = None
-        best_format_count = 0
-        best_strategy = "none"
+        best_count = 0
+        best_source = ""
 
         for strategy in strategies:
-            opts = {**base_opts, **strategy}
+            opts = self._build_opts(use_proxy=False, strategy=strategy)
             info = self._extract_with_opts(url, opts)
             if info:
                 raw_formats = info.get("formats", [])
-                # Count video formats (not audio-only) with playable URLs
                 video_count = sum(
                     1 for f in raw_formats
                     if f.get("vcodec") not in (None, "none") and f.get("url")
                 )
-                strategy_name = str(strategy.get("extractor_args", {}).get("youtube", {}).get("player_client", "auto"))
-                logger.info(
-                    "Strategy %s: %s total formats, %s video formats",
-                    strategy_name, len(raw_formats), video_count,
-                )
-                if video_count > best_format_count:
-                    best_format_count = video_count
+                name = str(strategy.get("extractor_args", {}).get("youtube", {}).get("player_client", "auto"))
+                logger.info("No-proxy strategy %s: %s video formats", name, video_count)
+                if video_count > best_count:
+                    best_count = video_count
                     best_info = info
-                    best_strategy = strategy_name
+                    best_source = f"no-proxy/{name}"
+                if video_count >= 3:
+                    break  # Good enough
+
+        # If no formats without proxy, try WITH proxy
+        if best_count < 2:
+            for strategy in strategies:
+                opts = self._build_opts(use_proxy=True, strategy=strategy)
+                info = self._extract_with_opts(url, opts)
+                if info:
+                    raw_formats = info.get("formats", [])
+                    video_count = sum(
+                        1 for f in raw_formats
+                        if f.get("vcodec") not in (None, "none") and f.get("url")
+                    )
+                    name = str(strategy.get("extractor_args", {}).get("youtube", {}).get("player_client", "auto"))
+                    logger.info("Proxy strategy %s: %s video formats", name, video_count)
+                    if video_count > best_count:
+                        best_count = video_count
+                        best_info = info
+                        best_source = f"proxy/{name}"
 
         if best_info is None:
             raise ValueError("All extraction strategies failed")
 
-        logger.info(
-            "Best strategy: %s with %s video formats",
-            best_strategy, best_format_count,
-        )
+        logger.info("Best source: %s with %s video formats", best_source, best_count)
         return best_info
 
     async def extract(self, url: str) -> VideoInfo:
@@ -157,7 +168,6 @@ class VideoService:
                 continue
 
             protocol = str(fmt.get("protocol", "")).lower()
-            # Accept direct HTTP(S) and HLS streams
             if protocol not in ("http", "https", "m3u8", "m3u8_native"):
                 continue
 
@@ -189,7 +199,6 @@ class VideoService:
                 }
             )
 
-        # Sort by quality descending, then prefer mp4 for same quality
         valid.sort(key=lambda x: (-x["height"], -x["is_mp4"]))
 
         result: list[VideoFormat] = []

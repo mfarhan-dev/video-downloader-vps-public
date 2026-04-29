@@ -95,11 +95,23 @@ async def extract_video(
 
 
 async def _stream_https(url: str, headers: dict):
-    """Stream a direct HTTPS video URL via proxy."""
-    async with httpx.AsyncClient(
-        follow_redirects=True,
-        proxy="http://exwnzzqh:ib3jgwgkjyl1@31.59.20.176:6754",
-    ) as client:
+    """Stream a direct HTTPS video URL. Tries without proxy first, then with proxy."""
+    proxy = "http://exwnzzqh:ib3jgwgkjyl1@31.59.20.176:6754"
+
+    # Try without proxy first (extracted URLs are signed and often work directly)
+    try:
+        async with httpx.AsyncClient(follow_redirects=True) as client:
+            async with client.stream("GET", url, headers=headers, timeout=120) as response:
+                if response.status_code < 400:
+                    async for chunk in response.aiter_bytes(chunk_size=8192):
+                        yield chunk
+                    return
+                logger.info("Direct download returned %s, trying proxy", response.status_code)
+    except Exception as exc:
+        logger.info("Direct download failed, trying proxy: %s", exc)
+
+    # Fallback to proxy
+    async with httpx.AsyncClient(follow_redirects=True, proxy=proxy) as client:
         async with client.stream("GET", url, headers=headers, timeout=120) as response:
             if response.status_code >= 400:
                 logger.error("Upstream returned %s for %s", response.status_code, url)

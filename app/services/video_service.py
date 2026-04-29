@@ -21,13 +21,24 @@ class VideoService:
         self.timeout = timeout
         self.max_formats = max_formats
 
+    def _extract_with_opts(self, url: str, ydl_opts: dict) -> dict[str, Any] | None:
+        """Try extraction with given options. Returns info or None on failure."""
+        try:
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                return ydl.extract_info(url, download=False)
+        except Exception as exc:
+            logger.debug("Extraction failed with opts %s: %s", ydl_opts.get("extractor_args"), exc)
+            return None
+
     def _extract_sync(self, url: str) -> dict[str, Any]:
-        """Synchronous wrapper around yt-dlp extract_info."""
-        ydl_opts = {
+        """Synchronous wrapper around yt-dlp extract_info with multiple strategies."""
+        proxy = "http://exwnzzqh:ib3jgwgkjyl1@31.59.20.176:6754"
+
+        base_opts = {
             "quiet": True,
             "no_warnings": True,
             "js_runtimes": {"node": {}},
-            "proxy": "http://exwnzzqh:ib3jgwgkjyl1@31.59.20.176:6754",
+            "proxy": proxy,
             "user_agent": (
                 "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
                 "AppleWebKit/537.36 (KHTML, like Gecko) "
@@ -35,21 +46,65 @@ class VideoService:
             ),
             "referer": "https://www.youtube.com/",
             "geo_bypass": True,
-            "extractor_args": {
-                "youtube": {
-                    "player_client": ["android", "web"],
-                }
-            },
         }
+
         # Check for cookies file
         for cookies_path in ("/tmp/yt_cookies.txt", "/app/cookies.txt"):
             import os
             if os.path.exists(cookies_path):
-                ydl_opts["cookiefile"] = cookies_path
+                base_opts["cookiefile"] = cookies_path
+                logger.info("Using cookies from %s", cookies_path)
                 break
 
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            return ydl.extract_info(url, download=False)
+        # Try multiple player_client strategies to get the most formats
+        # YouTube serves different formats depending on client type and IP reputation
+        strategies = [
+            # Strategy 1: web client (usually best quality selection)
+            {"extractor_args": {"youtube": {"player_client": ["web"]}}},
+            # Strategy 2: web + ios (ios often gets more formats)
+            {"extractor_args": {"youtube": {"player_client": ["web", "ios"]}}},
+            # Strategy 3: ios only (sometimes bypasses restrictions)
+            {"extractor_args": {"youtube": {"player_client": ["ios"]}}},
+            # Strategy 4: android + web (original config)
+            {"extractor_args": {"youtube": {"player_client": ["android", "web"]}}},
+            # Strategy 5: web_embedded (for embed player, sometimes different restrictions)
+            {"extractor_args": {"youtube": {"player_client": ["web_embedded"]}}},
+            # Strategy 6: no player_client restriction (yt-dlp auto-selects)
+            {},
+        ]
+
+        best_info = None
+        best_format_count = 0
+        best_strategy = "none"
+
+        for strategy in strategies:
+            opts = {**base_opts, **strategy}
+            info = self._extract_with_opts(url, opts)
+            if info:
+                raw_formats = info.get("formats", [])
+                # Count video formats (not audio-only)
+                video_count = sum(
+                    1 for f in raw_formats
+                    if f.get("vcodec") not in (None, "none") and f.get("url")
+                )
+                strategy_name = str(strategy.get("extractor_args", {}).get("youtube", {}).get("player_client", "auto"))
+                logger.info(
+                    "Strategy %s: %s total formats, %s video formats",
+                    strategy_name, len(raw_formats), video_count,
+                )
+                if video_count > best_format_count:
+                    best_format_count = video_count
+                    best_info = info
+                    best_strategy = strategy_name
+
+        if best_info is None:
+            raise ValueError("All extraction strategies failed")
+
+        logger.info(
+            "Best strategy: %s with %s video formats",
+            best_strategy, best_format_count,
+        )
+        return best_info
 
     async def extract(self, url: str) -> VideoInfo:
         """Extract video metadata asynchronously with timeout handling."""
@@ -67,6 +122,10 @@ class VideoService:
             raise ValueError(f"Failed to extract video info: {exc}")
 
         formats = self._filter_formats(info.get("formats", []))
+        logger.info(
+            "Returning %s formats after filtering (from %s raw)",
+            len(formats), len(info.get("formats", [])),
+        )
 
         return VideoInfo(
             title=info.get("title") or "Unknown",

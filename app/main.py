@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from pathlib import Path
 
@@ -7,6 +8,7 @@ from fastapi.responses import HTMLResponse
 
 from app.api.routes import router
 from app.core.config import settings
+from app.services.cookie_service import CookieService, periodic_cookie_refresh
 
 logging.basicConfig(
     level=logging.DEBUG if settings.debug else logging.INFO,
@@ -19,6 +21,27 @@ app = FastAPI(
     docs_url="/docs",
     redoc_url="/redoc",
 )
+
+
+@app.on_event("startup")
+async def startup_event():
+    """Generate cookies on startup and start periodic refresh."""
+    logger = logging.getLogger(__name__)
+    logger.info("App starting up — generating initial cookies...")
+    try:
+        service = CookieService()
+        path = await service.generate_youtube_cookies()
+        if path:
+            logger.info("Initial cookies generated at %s", path)
+        else:
+            logger.warning("Initial cookie generation returned no cookies")
+    except Exception:
+        logger.exception("Initial cookie generation failed")
+
+    # Start background periodic refresh (every 30 min)
+    asyncio.create_task(periodic_cookie_refresh(interval_seconds=1800))
+    logger.info("Periodic cookie refresh scheduled every 30 minutes")
+
 
 app.add_middleware(
     CORSMiddleware,

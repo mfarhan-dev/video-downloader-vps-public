@@ -66,6 +66,8 @@ class VideoService:
 
     def _extract_sync(self, url: str) -> dict[str, Any]:
         """Synchronous wrapper around yt-dlp extract_info with multiple strategies."""
+        from app.services.cookie_service import CookieService
+
         # Use fewer strategies to avoid triggering rate limits
         # Order matters: try no-proxy first (often gives best results), then proxy fallback
         strategies = [
@@ -78,6 +80,7 @@ class VideoService:
         best_info = None
         best_count = 0
         best_source = ""
+        bot_detected = False
 
         for use_proxy, strategy, name in strategies:
             opts = self._build_opts(use_proxy=use_proxy, strategy=strategy)
@@ -95,8 +98,39 @@ class VideoService:
                     best_source = name
                 if video_count >= 3:
                     break  # Good enough, stop hammering YouTube
+            else:
+                bot_detected = True
             # Small random delay between strategies to avoid rate limiting
             time.sleep(random.uniform(0.5, 1.5))
+
+        # If bot detection happened and we got poor results, try once more with fresh cookies
+        if bot_detected and best_count < 2 and ("youtube.com" in url or "youtu.be" in url):
+            logger.info("Bot detected — refreshing cookies and retrying...")
+            try:
+                loop = asyncio.get_event_loop()
+                cookie_service = CookieService()
+                loop.run_until_complete(cookie_service.generate_youtube_cookies())
+            except Exception as exc:
+                logger.warning("Cookie refresh failed: %s", exc)
+
+            # Retry no-proxy with potentially fresh cookies
+            for use_proxy, strategy, name in strategies[:2]:
+                opts = self._build_opts(use_proxy=use_proxy, strategy=strategy)
+                info = self._extract_with_opts(url, opts)
+                if info:
+                    raw_formats = info.get("formats", [])
+                    video_count = sum(
+                        1 for f in raw_formats
+                        if f.get("vcodec") not in (None, "none") and f.get("url")
+                    )
+                    logger.info("Retry strategy %s: %s video formats", name, video_count)
+                    if video_count > best_count:
+                        best_count = video_count
+                        best_info = info
+                        best_source = name + "-retry"
+                    if video_count >= 3:
+                        break
+                time.sleep(random.uniform(0.5, 1.5))
 
         if best_info is None:
             raise ValueError("All extraction strategies failed")

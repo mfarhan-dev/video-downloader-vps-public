@@ -209,10 +209,14 @@ class BrowserVideoService:
                             name = c.get("name", "")
                             value = c.get("value", "")
                             lines.append(f"{domain}\t{flag}\t{path}\t{secure}\t{expires}\t{name}\t{value}")
-                        cookie_file = "/tmp/yt_cookies.txt"
-                        with open(cookie_file, "w") as f:
-                            f.write("\n".join(lines) + "\n")
-                        logger.info("Exported %s cookies to %s for yt-dlp", len(cookies), cookie_file)
+                        import os
+                        for cookie_file in ("/app/cookies.txt", "/tmp/yt_cookies.txt"):
+                            dir_name = os.path.dirname(cookie_file)
+                            if os.path.isdir(dir_name) and os.access(dir_name, os.W_OK):
+                                with open(cookie_file, "w") as f:
+                                    f.write("\n".join(lines) + "\n")
+                                logger.info("Exported %s cookies to %s for yt-dlp", len(cookies), cookie_file)
+                                break
                 except Exception as ce:
                     logger.warning("Failed to export cookies: %s", ce)
                 await browser.close()

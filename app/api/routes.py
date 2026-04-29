@@ -9,6 +9,7 @@ from fastapi.responses import StreamingResponse
 from app.core.config import settings
 from app.models.response_models import VideoInfo
 from app.services.browser_service import BrowserVideoService
+from app.services.cookie_service import CookieService
 from app.services.video_service import VideoService
 
 router = APIRouter()
@@ -16,6 +17,19 @@ logger = logging.getLogger(__name__)
 
 video_service = VideoService()
 browser_service = BrowserVideoService()
+cookie_service = CookieService()
+
+
+@router.post("/refresh-cookies")
+async def refresh_cookies() -> dict[str, str]:
+    """
+    Manually refresh YouTube session cookies.
+    Call this if YouTube extraction starts returning bot errors.
+    """
+    path = await cookie_service.generate_youtube_cookies()
+    if path:
+        return {"status": "ok", "message": f"Cookies refreshed at {path}"}
+    return {"status": "error", "message": "Cookie generation failed"}
 
 
 @router.get("/extract", response_model=VideoInfo)

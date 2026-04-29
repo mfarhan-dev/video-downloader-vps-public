@@ -89,6 +89,17 @@ async def extract_video(
                 logger.info("yt-dlp with cookies failed, keeping browser result: %s", exc)
 
     if not info or not info.formats:
+        # Check if this looks like a bot block
+        if "youtube.com" in url or "youtu.be" in url:
+            raise HTTPException(
+                status_code=429,
+                detail=(
+                    "YouTube bot detection is active for this server IP. "
+                    "To fix this, export cookies from a logged-in YouTube browser session "
+                    "and place them at ./video-downloader/cookies.txt on the host, "
+                    "or try again later."
+                ),
+            )
         raise HTTPException(status_code=404, detail="No formats available for this video")
 
     return info
@@ -176,73 +187,6 @@ async def _stream_m3u8_via_ytdl(video_url: str, format_id: str):
         )
 
 
-@router.get("/debug-extract")
-async def debug_extract(url: str = Query(...)) -> dict:
-    """Debug endpoint to test extraction strategies."""
-    import yt_dlp
-    import traceback
-
-    results = []
-    strategies = [
-        ("no-proxy/auto", {}),
-        ("no-proxy/web", {"extractor_args": {"youtube": {"player_client": ["web"]}}}),
-        ("proxy/auto", {"proxy": "http://exwnzzqh:ib3jgwgkjyl1@31.59.20.176:6754"}),
-    ]
-
-    for name, strategy in strategies:
-        opts = {
-            "quiet": True,
-            "no_warnings": True,
-            "js_runtimes": {"node": {}},
-            **strategy,
-        }
-        try:
-            with yt_dlp.YoutubeDL(opts) as ydl:
-                info = ydl.extract_info(url, download=False)
-                formats = info.get("formats", [])
-                video_count = sum(1 for f in formats if f.get("vcodec") not in (None, "none"))
-                results.append({
-                    "strategy": name,
-                    "status": "ok",
-                    "title": info.get("title"),
-                    "total_formats": len(formats),
-                    "video_formats": video_count,
-                })
-        except Exception as exc:
-            results.append({
-                "strategy": name,
-                "status": "error",
-                "error": str(exc),
-                "traceback": traceback.format_exc().splitlines()[-3:],
-            })
-
-    # Try browser embed page
-    browser_result = {"status": "not_run"}
-    if "youtube.com" in url or "youtu.be" in url:
-        try:
-            from playwright.async_api import async_playwright
-            async with async_playwright() as p:
-                browser = await p.chromium.launch(headless=True, args=["--no-sandbox", "--disable-setuid-sandbox"])
-                page = await browser.new_page()
-                video_id = url.split("v=")[-1].split("&")[0]
-                await page.goto(f"https://www.youtube.com/embed/{video_id}", wait_until="domcontentloaded", timeout=30000)
-                await asyncio.sleep(5)
-                content = await page.content()
-                has_bot = "bot" in content.lower() or "confirm" in content.lower()
-                title = await page.title()
-                browser_result = {
-                    "status": "ok",
-                    "title": title,
-                    "has_bot_text": has_bot,
-                    "content_length": len(content),
-                }
-                await browser.close()
-        except Exception as exc:
-            browser_result = {"status": "error", "error": str(exc)}
-
-    return {"url": url, "results": results, "browser_embed": browser_result}
-
-
 @router.get("/download")
 async def download_video(
     url: str = Query(..., description="Video URL to download"),
@@ -299,6 +243,14 @@ async def download_video(
             await asyncio.sleep(3)
 
     if not info or not info.formats:
+        if "youtube.com" in url or "youtu.be" in url:
+            raise HTTPException(
+                status_code=429,
+                detail=(
+                    "YouTube bot detection is active. "
+                    "Add cookies.txt or wait for rate limit to expire."
+                ),
+            )
         raise HTTPException(status_code=404, detail="No download formats available for this video")
 
     # Find requested format, or default to first available

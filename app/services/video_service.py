@@ -27,10 +27,18 @@ class VideoService:
             "quiet": True,
             "no_warnings": True,
             "js_runtimes": {"node": {}},
-            "proxy": "http://exwnzzqh:ib3jgwgkjyl1@31.59.20.176:6754",
+            "proxy": "socks5://exwnzzqh:ib3jgwgkjyl1@31.59.20.176:6754",
+            "user_agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/124.0.0.0 Safari/537.36"
+            ),
+            "referer": "https://www.youtube.com/",
+            "geo_bypass": True,
             "extractor_args": {
                 "youtube": {
-                    "player_client": ["android", "web", "ios"],
+                    "player_client": ["web"],
+                    "player_skip": ["webpage", "configs", "js"],
                 }
             },
         }

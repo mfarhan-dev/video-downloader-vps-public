@@ -91,22 +91,31 @@ async def download_video(
 
     info = None
 
-    # Try yt-dlp first
-    try:
-        info = await video_service.extract(url)
-    except Exception as exc:
-        logger.info("yt-dlp extraction failed for download, trying browser fallback: %s", exc)
-
-    # Fallback to browser
-    if not info or not info.formats:
+    # Retry extraction up to 2 times (proxy can be flaky)
+    for attempt in range(2):
+        # Try yt-dlp first
         try:
-            info = await browser_service.extract(url)
-        except RuntimeError as exc:
-            logger.error("Browser service not available: %s", exc)
-            raise HTTPException(status_code=503, detail=str(exc))
+            info = await video_service.extract(url)
         except Exception as exc:
-            logger.exception("Browser extraction failed for download: %s", exc)
-            raise HTTPException(status_code=400, detail="Could not extract video info")
+            logger.info("yt-dlp extraction failed for download (attempt %s): %s", attempt + 1, exc)
+
+        # Fallback to browser
+        if not info or not info.formats:
+            try:
+                info = await browser_service.extract(url)
+            except RuntimeError as exc:
+                logger.error("Browser service not available: %s", exc)
+                raise HTTPException(status_code=503, detail=str(exc))
+            except Exception as exc:
+                logger.warning("Browser extraction failed for download (attempt %s): %s", attempt + 1, exc)
+
+        if info and info.formats:
+            break
+
+        if attempt == 0:
+            logger.info("Retrying extraction in 3 seconds...")
+            import asyncio
+            await asyncio.sleep(3)
 
     if not info or not info.formats:
         raise HTTPException(status_code=404, detail="No download formats available for this video")

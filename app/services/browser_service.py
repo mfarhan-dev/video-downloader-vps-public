@@ -272,14 +272,20 @@ class BrowserVideoService:
             if player_response and "streamingData" in player_response:
                 streaming_data = player_response["streamingData"]
                 formats_data = streaming_data.get("formats", []) + streaming_data.get("adaptiveFormats", [])
+                logger.info("YouTube player response: %s formats, %s adaptiveFormats", len(streaming_data.get("formats", [])), len(streaming_data.get("adaptiveFormats", [])))
 
+                direct_count = 0
+                cipher_count = 0
                 for fmt in formats_data:
                     stream_url = fmt.get("url")
                     if not stream_url and "signatureCipher" in fmt:
+                        cipher_count += 1
                         cipher = fmt["signatureCipher"]
                         url_match = re.search(r'url=([^&]+)', cipher)
                         if url_match:
                             stream_url = url_match.group(1).replace('%3A', ':').replace('%2F', '/').replace('%3F', '?').replace('%3D', '=').replace('%26', '&')
+                    elif stream_url:
+                        direct_count += 1
                     
                     if not stream_url:
                         continue
@@ -296,6 +302,8 @@ class BrowserVideoService:
                         ext=ext,
                         url=stream_url,
                     ))
+
+                logger.info("Browser extracted: %s direct URLs, %s signatureCiphers skipped | returning %s formats", direct_count, cipher_count, len(info["formats"]))
 
                 if player_response.get("videoDetails", {}).get("lengthSeconds"):
                     info["duration"] = int(player_response["videoDetails"]["lengthSeconds"])

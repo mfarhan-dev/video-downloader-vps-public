@@ -178,7 +178,7 @@ async def _stream_m3u8_via_ytdl(video_url: str, format_id: str):
 
 @router.get("/debug-extract")
 async def debug_extract(url: str = Query(...)) -> dict:
-    """Debug endpoint to test extraction without proxy."""
+    """Debug endpoint to test extraction strategies."""
     import yt_dlp
     import traceback
 
@@ -216,7 +216,31 @@ async def debug_extract(url: str = Query(...)) -> dict:
                 "traceback": traceback.format_exc().splitlines()[-3:],
             })
 
-    return {"url": url, "results": results}
+    # Try browser embed page
+    browser_result = {"status": "not_run"}
+    if "youtube.com" in url or "youtu.be" in url:
+        try:
+            from playwright.async_api import async_playwright
+            async with async_playwright() as p:
+                browser = await p.chromium.launch(headless=True, args=["--no-sandbox", "--disable-setuid-sandbox"])
+                page = await browser.new_page()
+                video_id = url.split("v=")[-1].split("&")[0]
+                await page.goto(f"https://www.youtube.com/embed/{video_id}", wait_until="domcontentloaded", timeout=30000)
+                await asyncio.sleep(5)
+                content = await page.content()
+                has_bot = "bot" in content.lower() or "confirm" in content.lower()
+                title = await page.title()
+                browser_result = {
+                    "status": "ok",
+                    "title": title,
+                    "has_bot_text": has_bot,
+                    "content_length": len(content),
+                }
+                await browser.close()
+        except Exception as exc:
+            browser_result = {"status": "error", "error": str(exc)}
+
+    return {"url": url, "results": results, "browser_embed": browser_result}
 
 
 @router.get("/download")

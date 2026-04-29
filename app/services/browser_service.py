@@ -75,56 +75,77 @@ class BrowserVideoService:
             "formats": [],
         }
 
-        async with async_playwright() as p:
-            browser = await p.chromium.launch(
-                headless=True,
-                args=[
-                    "--no-sandbox",
-                    "--disable-setuid-sandbox",
-                    "--disable-dev-shm-usage",
-                    "--disable-accelerated-2d-canvas",
-                    "--no-first-run",
-                    "--no-zygote",
-                    "--disable-gpu",
-                    "--disable-blink-features=AutomationControlled",
-                    "--disable-infobars",
-                    "--window-size=1920,1080",
-                    "--start-maximized",
-                    "--disable-extensions",
-                    "--disable-default-apps",
-                    "--disable-background-networking",
-                    "--disable-background-timer-throttling",
-                    "--disable-backgrounding-occluded-windows",
-                    "--disable-breakpad",
-                    "--disable-component-update",
-                    "--disable-features=TranslateUI",
-                    "--disable-hang-monitor",
-                    "--disable-ipc-flooding-protection",
-                    "--disable-popup-blocking",
-                    "--disable-prompt-on-repost",
-                    "--disable-renderer-backgrounding",
-                    "--force-color-profile=srgb",
-                    "--metrics-recording-only",
-                    "--enable-automation",
-                    "--password-store=basic",
-                    "--use-mock-keychain",
-                ],
-            )
+        # For YouTube: the proxy IP is often rate-limited/bot-detected.
+        # The VPS IP may be cleaner for page extraction.
+        is_youtube = "youtube.com" in url or "youtu.be" in url
+        use_proxy = not is_youtube
 
-            context = await browser.new_context(
-                proxy={
+        async with async_playwright() as p:
+            launch_args = [
+                "--no-sandbox",
+                "--disable-setuid-sandbox",
+                "--disable-dev-shm-usage",
+                "--disable-accelerated-2d-canvas",
+                "--no-first-run",
+                "--no-zygote",
+                "--disable-gpu",
+                "--disable-blink-features=AutomationControlled",
+                "--disable-infobars",
+                "--window-size=1920,1080",
+                "--start-maximized",
+                "--disable-extensions",
+                "--disable-default-apps",
+                "--disable-background-networking",
+                "--disable-background-timer-throttling",
+                "--disable-backgrounding-occluded-windows",
+                "--disable-breakpad",
+                "--disable-component-update",
+                "--disable-features=TranslateUI",
+                "--disable-hang-monitor",
+                "--disable-ipc-flooding-protection",
+                "--disable-popup-blocking",
+                "--disable-prompt-on-repost",
+                "--disable-renderer-backgrounding",
+                "--force-color-profile=srgb",
+                "--metrics-recording-only",
+                "--enable-automation",
+                "--password-store=basic",
+                "--use-mock-keychain",
+            ]
+
+            if use_proxy:
+                browser = await p.chromium.launch(
+                    headless=True,
+                    proxy={
+                        "server": "http://31.59.20.176:6754",
+                        "username": "exwnzzqh",
+                        "password": "ib3jgwgkjyl1",
+                    },
+                    args=launch_args,
+                )
+            else:
+                browser = await p.chromium.launch(
+                    headless=True,
+                    args=launch_args,
+                )
+
+            context_opts = {
+                "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+                "viewport": {"width": 1920, "height": 1080},
+                "locale": "en-US",
+                "timezone_id": "America/New_York",
+                "permissions": ["geolocation"],
+                "java_script_enabled": True,
+                "bypass_csp": True,
+            }
+            if use_proxy:
+                context_opts["proxy"] = {
                     "server": "http://31.59.20.176:6754",
                     "username": "exwnzzqh",
                     "password": "ib3jgwgkjyl1",
-                },
-                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-                viewport={"width": 1920, "height": 1080},
-                locale="en-US",
-                timezone_id="America/New_York",
-                permissions=["geolocation"],
-                java_script_enabled=True,
-                bypass_csp=True,
-            )
+                }
+
+            context = await browser.new_context(**context_opts)
 
             page = await context.new_page()
             await page.add_init_script(STEALTH_SCRIPT)

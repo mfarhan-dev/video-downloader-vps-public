@@ -176,6 +176,49 @@ async def _stream_m3u8_via_ytdl(video_url: str, format_id: str):
         )
 
 
+@router.get("/debug-extract")
+async def debug_extract(url: str = Query(...)) -> dict:
+    """Debug endpoint to test extraction without proxy."""
+    import yt_dlp
+    import traceback
+
+    results = []
+    strategies = [
+        ("no-proxy/auto", {}),
+        ("no-proxy/web", {"extractor_args": {"youtube": {"player_client": ["web"]}}}),
+        ("proxy/auto", {"proxy": "http://exwnzzqh:ib3jgwgkjyl1@31.59.20.176:6754"}),
+    ]
+
+    for name, strategy in strategies:
+        opts = {
+            "quiet": True,
+            "no_warnings": True,
+            "js_runtimes": {"node": {}},
+            **strategy,
+        }
+        try:
+            with yt_dlp.YoutubeDL(opts) as ydl:
+                info = ydl.extract_info(url, download=False)
+                formats = info.get("formats", [])
+                video_count = sum(1 for f in formats if f.get("vcodec") not in (None, "none"))
+                results.append({
+                    "strategy": name,
+                    "status": "ok",
+                    "title": info.get("title"),
+                    "total_formats": len(formats),
+                    "video_formats": video_count,
+                })
+        except Exception as exc:
+            results.append({
+                "strategy": name,
+                "status": "error",
+                "error": str(exc),
+                "traceback": traceback.format_exc().splitlines()[-3:],
+            })
+
+    return {"url": url, "results": results}
+
+
 @router.get("/download")
 async def download_video(
     url: str = Query(..., description="Video URL to download"),

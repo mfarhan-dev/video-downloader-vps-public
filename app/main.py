@@ -5,6 +5,7 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
+from fastapi.staticfiles import StaticFiles
 
 from app.api.routes import router
 from app.core.config import settings
@@ -57,6 +58,12 @@ app.include_router(router)
 @app.get("/", response_class=HTMLResponse)
 async def root():
     html_path = Path(__file__).parent / "static" / "index.html"
+    return html_path.read_text(encoding="utf-8")
+
+
+@app.get("/apis", response_class=HTMLResponse)
+async def apis_page():
+    html_path = Path(__file__).parent / "static" / "apis.html"
     return html_path.read_text(encoding="utf-8")
 
 

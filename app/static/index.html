@@ -19,11 +19,41 @@
         }
         h1 {
             text-align: center;
-            margin-bottom: 30px;
+            margin-bottom: 10px;
             font-size: 2rem;
             background: linear-gradient(90deg, #00d4aa, #00a8e8);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
+        }
+        .subtitle {
+            text-align: center;
+            color: #888;
+            font-size: 0.9rem;
+            margin-bottom: 25px;
+        }
+        .subtitle a {
+            color: #00d4aa;
+            text-decoration: none;
+        }
+        .subtitle a:hover {
+            text-decoration: underline;
+        }
+        .toolbar {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+            flex-wrap: wrap;
+        }
+        .toolbar button.secondary {
+            background: transparent;
+            border: 2px solid #2a2a4a;
+            color: #888;
+            font-size: 14px;
+            padding: 10px 18px;
+        }
+        .toolbar button.secondary:hover {
+            border-color: #00d4aa;
+            color: #00d4aa;
         }
         .input-box {
             display: flex;
@@ -68,6 +98,14 @@
             padding: 40px;
             font-size: 1.1rem;
             color: #888;
+        }
+        .success {
+            background: rgba(0, 212, 170, 0.15);
+            border: 1px solid #00d4aa;
+            color: #00d4aa;
+            padding: 16px;
+            border-radius: 12px;
+            margin-bottom: 20px;
         }
         .error {
             background: rgba(255, 71, 87, 0.15);
@@ -144,12 +182,19 @@
             .input-box { flex-direction: column; }
             table { font-size: 0.85rem; }
             th, td { padding: 10px; }
+            .toolbar { justify-content: center; }
         }
     </style>
 </head>
 <body>
     <div class="container">
         <h1>🎬 Video Downloader</h1>
+        <p class="subtitle">
+            <a href="/apis">📋 API Docs & Test Page</a>
+        </p>
+        <div class="toolbar">
+            <button class="secondary" onclick="refreshCookies()">🍪 Refresh Cookies</button>
+        </div>
         <div class="input-box">
             <input type="url" id="urlInput" placeholder="Paste YouTube or video URL here..." value="https://www.youtube.com/watch?v=dQw4w9WgXcQ">
             <button id="fetchBtn" onclick="fetchVideo()">Fetch Formats</button>
@@ -159,6 +204,30 @@
 
     <script>
         const API_BASE = '';
+
+        async function refreshCookies() {
+            const btn = document.querySelector('.toolbar button.secondary');
+            const result = document.getElementById('result');
+            const originalText = btn.textContent;
+            btn.disabled = true;
+            btn.textContent = '🔄 Refreshing...';
+            result.innerHTML = '<div class="loading">⏳ Generating fresh cookies...</div>';
+
+            try {
+                const res = await fetch(`${API_BASE}/refresh-cookies`, { method: 'POST' });
+                const data = await res.json();
+                if (data.status === 'ok') {
+                    result.innerHTML = `<div class="success">✅ ${data.message}</div>`;
+                } else {
+                    result.innerHTML = `<div class="error">❌ ${data.message}</div>`;
+                }
+            } catch (e) {
+                result.innerHTML = `<div class="error">❌ ${e.message}</div>`;
+            } finally {
+                btn.disabled = false;
+                btn.textContent = originalText;
+            }
+        }
 
         async function fetchVideo() {
             const url = document.getElementById('urlInput').value.trim();
@@ -235,7 +304,6 @@
 
         function downloadVideo(format_id, title, quality, ext) {
             const urlInput = document.getElementById('urlInput').value.trim();
-            // Build proxy download URL
             const proxyUrl = `${API_BASE}/download?url=${encodeURIComponent(urlInput)}&format_id=${encodeURIComponent(format_id)}`;
             const a = document.createElement('a');
             a.href = proxyUrl;
@@ -259,7 +327,6 @@
             return name.replace(/[\\/:*?"<>|]/g, '').substring(0, 80);
         }
 
-        // Allow Enter key to submit
         document.getElementById('urlInput').addEventListener('keypress', (e) => {
             if (e.key === 'Enter') fetchVideo();
         });

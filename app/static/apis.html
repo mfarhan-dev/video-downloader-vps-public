@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>API Docs — Video Downloader</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            min-height: 100vh;
+            color: #e0e0e0;
+            padding: 20px;
+        }
+        .container {
+            max-width: 960px;
+            margin: 0 auto;
+        }
+        h1 {
+            text-align: center;
+            margin-bottom: 8px;
+            font-size: 1.8rem;
+            background: linear-gradient(90deg, #00d4aa, #00a8e8);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .subtitle {
+            text-align: center;
+            color: #888;
+            font-size: 0.9rem;
+            margin-bottom: 30px;
+        }
+        .subtitle a {
+            color: #00d4aa;
+            text-decoration: none;
+        }
+        .subtitle a:hover { text-decoration: underline; }
+        .endpoint {
+            background: rgba(255,255,255,0.04);
+            border: 1px solid rgba(255,255,255,0.08);
+            border-radius: 16px;
+            padding: 22px;
+            margin-bottom: 20px;
+        }
+        .endpoint-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 12px;
+            flex-wrap: wrap;
+        }
+        .method {
+            font-size: 0.75rem;
+            font-weight: 700;
+            padding: 4px 10px;
+            border-radius: 6px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .method.get { background: rgba(0, 212, 170, 0.2); color: #00d4aa; }
+        .method.post { background: rgba(168, 130, 255, 0.2); color: #a882ff; }
+        .path {
+            font-family: 'SF Mono', Monaco, monospace;
+            font-size: 0.95rem;
+            color: #fff;
+            word-break: break-all;
+        }
+        .description {
+            color: #888;
+            font-size: 0.9rem;
+            margin-bottom: 14px;
+            line-height: 1.5;
+        }
+        .code-block {
+            position: relative;
+            background: #0f0f23;
+            border: 1px solid #2a2a4a;
+            border-radius: 10px;
+            padding: 14px 16px;
+            overflow-x: auto;
+        }
+        .code-block pre {
+            font-family: 'SF Mono', Monaco, monospace;
+            font-size: 0.82rem;
+            color: #c0c0d0;
+            line-height: 1.6;
+            white-space: pre-wrap;
+            word-break: break-all;
+            margin: 0;
+            padding-right: 40px;
+        }
+        .copy-btn {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: rgba(255,255,255,0.08);
+            border: 1px solid rgba(255,255,255,0.1);
+            color: #888;
+            padding: 6px 12px;
+            border-radius: 6px;
+            font-size: 0.75rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        .copy-btn:hover {
+            background: rgba(0, 212, 170, 0.15);
+            color: #00d4aa;
+            border-color: rgba(0, 212, 170, 0.3);
+        }
+        .copy-btn.copied {
+            background: rgba(0, 212, 170, 0.2);
+            color: #00d4aa;
+            border-color: #00d4aa;
+        }
+        .param-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 12px;
+            font-size: 0.85rem;
+        }
+        .param-table th, .param-table td {
+            text-align: left;
+            padding: 8px 10px;
+            border-bottom: 1px solid rgba(255,255,255,0.06);
+        }
+        .param-table th {
+            color: #00d4aa;
+            font-weight: 600;
+        }
+        .param-table td {
+            color: #aaa;
+        }
+        .param-table code {
+            background: rgba(255,255,255,0.08);
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: 'SF Mono', Monaco, monospace;
+            font-size: 0.8rem;
+            color: #fff;
+        }
+        .test-input {
+            display: flex;
+            gap: 8px;
+            margin-top: 12px;
+            flex-wrap: wrap;
+        }
+        .test-input input {
+            flex: 1;
+            min-width: 200px;
+            padding: 10px 14px;
+            border: 1px solid #2a2a4a;
+            border-radius: 8px;
+            background: #0f0f23;
+            color: #e0e0e0;
+            font-size: 14px;
+            outline: none;
+        }
+        .test-input input:focus { border-color: #00d4aa; }
+        .test-input button {
+            padding: 10px 18px;
+            font-size: 14px;
+            border-radius: 8px;
+        }
+        .response-box {
+            margin-top: 12px;
+            background: #0f0f23;
+            border: 1px solid #2a2a4a;
+            border-radius: 10px;
+            padding: 14px;
+            max-height: 300px;
+            overflow: auto;
+            display: none;
+        }
+        .response-box.visible { display: block; }
+        .response-box pre {
+            font-family: 'SF Mono', Monaco, monospace;
+            font-size: 0.78rem;
+            color: #c0c0d0;
+            margin: 0;
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+        @media (max-width: 600px) {
+            .test-input { flex-direction: column; }
+            .test-input input { width: 100%; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📋 API Reference</h1>
+        <p class="subtitle">
+            <a href="/">← Back to Downloader</a> · 
+            Base URL: <code id="baseUrl" style="color:#fff;">https://api.srv1053900.hstgr.cloud</code>
+        </p>
+
+        <!-- Extract -->
+        <div class="endpoint">
+            <div class="endpoint-header">
+                <span class="method get">GET</span>
+                <span class="path">/extract?url=&lt;video_url&gt;</span>
+            </div>
+            <div class="description">
+                Extract video metadata and available formats. Returns title, thumbnail, duration, and a list of streamable formats.
+            </div>
+            <div class="code-block">
+                <button class="copy-btn" onclick="copyCurl(this, 'extract')">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                    Copy
+                </button>
+                <pre id="curl-extract">curl -s "https://api.srv1053900.hstgr.cloud/extract?url=https://www.youtube.com/watch?v=dQw4w9WgXcQ" | python3 -m json.tool</pre>
+            </div>
+            <table class="param-table">
+                <tr><th>Param</th><th>Type</th><th>Required</th><th>Description</th></tr>
+                <tr><td><code>url</code></td><td>string</td><td>Yes</td><td>Video URL (YouTube, TikTok, Instagram, etc.)</td></tr>
+            </table>
+            <div class="test-input">
+                <input type="url" id="test-extract-url" placeholder="https://www.youtube.com/watch?v=dQw4w9WgXcQ" value="https://www.youtube.com/watch?v=dQw4w9WgXcQ">
+                <button onclick="testExtract()">🚀 Try It</button>
+            </div>
+            <div class="response-box" id="resp-extract"><pre>Loading...</pre></div>
+        </div>
+
+        <!-- Download -->
+        <div class="endpoint">
+            <div class="endpoint-header">
+                <span class="method get">GET</span>
+                <span class="path">/download?url=&lt;video_url&gt;&format_id=&lt;id&gt;</span>
+            </div>
+            <div class="description">
+                Proxy-download a specific video format. Re-extracts a fresh stream URL and pipes the binary back to you.
+            </div>
+            <div class="code-block">
+                <button class="copy-btn" onclick="copyCurl(this, 'download')">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                    Copy
+                </button>
+                <pre id="curl-download">curl -o video.mp4 "https://api.srv1053900.hstgr.cloud/download?url=https://www.youtube.com/watch?v=dQw4w9WgXcQ&format_id=136"</pre>
+            </div>
+            <table class="param-table">
+                <tr><th>Param</th><th>Type</th><th>Required</th><th>Description</th></tr>
+                <tr><td><code>url</code></td><td>string</td><td>Yes</td><td>Same video URL used for /extract</td></tr>
+                <tr><td><code>format_id</code></td><td>string</td><td>Yes</td><td>Format ID from /extract response</td></tr>
+            </table>
+            <div class="test-input">
+                <input type="url" id="test-download-url" placeholder="Video URL" value="https://www.youtube.com/watch?v=dQw4w9WgXcQ" style="flex:2;">
+                <input type="text" id="test-download-fid" placeholder="format_id" value="136" style="flex:1;min-width:100px;">
+                <button onclick="testDownload()">🚀 Try It</button>
+            </div>
+            <div class="response-box" id="resp-download"><pre>Loading...</pre></div>
+        </div>
+
+        <!-- Refresh Cookies -->
+        <div class="endpoint">
+            <div class="endpoint-header">
+                <span class="method post">POST</span>
+                <span class="path">/refresh-cookies</span>
+            </div>
+            <div class="description">
+                Force a fresh cookie generation via Playwright. Use this if YouTube extraction starts returning bot errors.
+            </div>
+            <div class="code-block">
+                <button class="copy-btn" onclick="copyCurl(this, 'cookies')">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                    Copy
+                </button>
+                <pre id="curl-cookies">curl -X POST "https://api.srv1053900.hstgr.cloud/refresh-cookies" | python3 -m json.tool</pre>
+            </div>
+            <div class="test-input">
+                <button onclick="testRefreshCookies()">🚀 Try It</button>
+            </div>
+            <div class="response-box" id="resp-cookies"><pre>Loading...</pre></div>
+        </div>
+
+        <!-- Health -->
+        <div class="endpoint">
+            <div class="endpoint-header">
+                <span class="method get">GET</span>
+                <span class="path">/health</span>
+            </div>
+            <div class="description">Simple health check. Returns <code>{"status": "healthy"}</code>.</div>
+            <div class="code-block">
+                <button class="copy-btn" onclick="copyCurl(this, 'health')">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                    Copy
+                </button>
+                <pre id="curl-health">curl -s "https://api.srv1053900.hstgr.cloud/health" | python3 -m json.tool</pre>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = '';
+
+        function copyCurl(btn, key) {
+            const text = document.getElementById('curl-' + key).textContent;
+            navigator.clipboard.writeText(text).then(() => {
+                btn.classList.add('copied');
+                const old = btn.innerHTML;
+                btn.innerHTML = '✅ Copied!';
+                setTimeout(() => {
+                    btn.classList.remove('copied');
+                    btn.innerHTML = old;
+                }, 1500);
+            });
+        }
+
+        async function testExtract() {
+            const url = document.getElementById('test-extract-url').value.trim();
+            const box = document.getElementById('resp-extract');
+            box.classList.add('visible');
+            box.querySelector('pre').textContent = 'Loading...';
+            try {
+                const res = await fetch(`${API_BASE}/extract?url=${encodeURIComponent(url)}`);
+                const data = await res.json();
+                box.querySelector('pre').textContent = JSON.stringify(data, null, 2);
+            } catch (e) {
+                box.querySelector('pre').textContent = 'Error: ' + e.message;
+            }
+        }
+
+        async function testDownload() {
+            const url = document.getElementById('test-download-url').value.trim();
+            const fid = document.getElementById('test-download-fid').value.trim();
+            const box = document.getElementById('resp-download');
+            box.classList.add('visible');
+            box.querySelector('pre').textContent = 'Downloading... check your browser downloads!';
+            const a = document.createElement('a');
+            a.href = `${API_BASE}/download?url=${encodeURIComponent(url)}&format_id=${encodeURIComponent(fid)}`;
+            a.download = 'video.mp4';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            setTimeout(() => {
+                box.querySelector('pre').textContent = 'Download triggered! If the browser blocked it, use the curl command above.';
+            }, 1000);
+        }
+
+        async function testRefreshCookies() {
+            const box = document.getElementById('resp-cookies');
+            box.classList.add('visible');
+            box.querySelector('pre').textContent = 'Refreshing cookies...';
+            try {
+                const res = await fetch(`${API_BASE}/refresh-cookies`, { method: 'POST' });
+                const data = await res.json();
+                box.querySelector('pre').textContent = JSON.stringify(data, null, 2);
+            } catch (e) {
+                box.querySelector('pre').textContent = 'Error: ' + e.message;
+            }
+        }
+    </script>
+</body>
+</html>

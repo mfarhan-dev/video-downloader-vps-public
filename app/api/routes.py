@@ -40,8 +40,10 @@ async def extract_video(
         info = await video_service.extract(url)
     except ValueError as exc:
         error_msg = str(exc).lower()
-        if any(x in error_msg for x in ["bot", "sign in", "blocked", "unsupported", "confirm"]):
-            logger.info("yt-dlp blocked, trying browser fallback for: %s", url)
+        # Any yt-dlp failure on YouTube should try browser fallback
+        # (proxy IPs often get rate-limited / bot-detected)
+        if any(x in error_msg for x in ["bot", "sign in", "blocked", "unsupported", "confirm", "failed", "all extraction strategies"]):
+            logger.info("yt-dlp failed, trying browser fallback for: %s | error: %s", url, exc)
         else:
             logger.warning("Extraction error for URL %s: %s", url, exc)
             raise HTTPException(status_code=400, detail=str(exc))

@@ -27,6 +27,7 @@ class VideoService:
             "quiet": True,
             "no_warnings": True,
             "js_runtimes": {"node": {}},
+            "proxy": "http://exwnzzqh:ib3jgwgkjyl1@31.59.20.176:6754",
             "extractor_args": {
                 "youtube": {
                     "player_client": ["android", "web", "ios"],

@@ -129,7 +129,10 @@ async def download_video(
             "Accept": "*/*",
             "Accept-Language": "en-US,en;q=0.9",
         }
-        async with httpx.AsyncClient(follow_redirects=True) as client:
+        async with httpx.AsyncClient(
+            follow_redirects=True,
+            proxy="http://exwnzzqh:ib3jgwgkjyl1@31.59.20.176:6754",
+        ) as client:
             async with client.stream("GET", fmt.url, headers=headers, timeout=120) as response:
                 if response.status_code >= 400:
                     logger.error("Upstream returned %s for %s", response.status_code, fmt.url)

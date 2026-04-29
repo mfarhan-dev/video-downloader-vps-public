@@ -220,14 +220,32 @@ class BrowserVideoService:
         if not video_info.get("title"):
             video_info["title"] = "Unknown Video"
 
-        # Deduplicate formats
+        # Validate and deduplicate formats
+        import time
         seen = set()
         unique_formats = []
         for fmt in video_info.get("formats", []):
             key = fmt.url
-            if key and key not in seen and "generate_204" not in key:
-                seen.add(key)
-                unique_formats.append(fmt)
+            if not key or key in seen or "generate_204" in key:
+                continue
+            # Heuristic: reject obviously fake URLs (expiry too far in future)
+            expire_match = __import__('re').search(r'expire[=/](\d{10})', key)
+            if expire_match:
+                expire_ts = int(expire_match.group(1))
+                now = int(time.time())
+                if expire_ts > now + 86400 * 30:  # More than 30 days in future = fake
+                    logger.warning("Rejecting fake URL with expiry %s", expire_ts)
+                    continue
+                if expire_ts < now:  # Already expired
+                    continue
+            # Reject URLs with absurd duration values
+            dur_match = __import__('re').search(r'dur[=/](\d+)', key)
+            if dur_match:
+                dur = int(dur_match.group(1))
+                if dur > 36000:  # More than 10 hours = fake
+                    continue
+            seen.add(key)
+            unique_formats.append(fmt)
 
         video_info["formats"] = unique_formats[: self.max_formats]
 

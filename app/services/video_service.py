@@ -1,5 +1,7 @@
 import asyncio
 import logging
+import random
+import time
 from typing import Any
 
 import yt_dlp
@@ -29,7 +31,11 @@ class VideoService:
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 return ydl.extract_info(url, download=False)
         except Exception as exc:
-            logger.debug("Extraction failed: %s", exc)
+            err = str(exc).lower()
+            if any(x in err for x in ["bot", "sign in", "blocked", "confirm you're not"]):
+                logger.debug("Bot block detected: %s", exc)
+            else:
+                logger.debug("Extraction failed: %s", exc)
             return None
 
     def _build_opts(self, use_proxy: bool, strategy: dict) -> dict:
@@ -49,9 +55,8 @@ class VideoService:
         if use_proxy:
             opts["proxy"] = PROXY_URL
 
-        # Check for cookies file
+        import os
         for cookies_path in ("/tmp/yt_cookies.txt", "/app/cookies.txt"):
-            import os
             if os.path.exists(cookies_path):
                 opts["cookiefile"] = cookies_path
                 break
@@ -61,22 +66,21 @@ class VideoService:
 
     def _extract_sync(self, url: str) -> dict[str, Any]:
         """Synchronous wrapper around yt-dlp extract_info with multiple strategies."""
+        # Use fewer strategies to avoid triggering rate limits
+        # Order matters: try no-proxy first (often gives best results), then proxy fallback
         strategies = [
-            {},
-            {"extractor_args": {"youtube": {"player_client": ["web"]}}},
-            {"extractor_args": {"youtube": {"player_client": ["web", "ios"]}}},
-            {"extractor_args": {"youtube": {"player_client": ["ios"]}}},
-            {"extractor_args": {"youtube": {"player_client": ["android", "web"]}}},
-            {"extractor_args": {"youtube": {"player_client": ["web_embedded"]}}},
+            (False, {}, "no-proxy/auto"),
+            (False, {"extractor_args": {"youtube": {"player_client": ["web"]}}}, "no-proxy/web"),
+            (True, {}, "proxy/auto"),
+            (True, {"extractor_args": {"youtube": {"player_client": ["web"]}}}, "proxy/web"),
         ]
 
-        # First: try WITHOUT proxy (VPS IP may be clean even if proxy is blocked)
         best_info = None
         best_count = 0
         best_source = ""
 
-        for strategy in strategies:
-            opts = self._build_opts(use_proxy=False, strategy=strategy)
+        for use_proxy, strategy, name in strategies:
+            opts = self._build_opts(use_proxy=use_proxy, strategy=strategy)
             info = self._extract_with_opts(url, opts)
             if info:
                 raw_formats = info.get("formats", [])
@@ -84,32 +88,15 @@ class VideoService:
                     1 for f in raw_formats
                     if f.get("vcodec") not in (None, "none") and f.get("url")
                 )
-                name = str(strategy.get("extractor_args", {}).get("youtube", {}).get("player_client", "auto"))
-                logger.info("No-proxy strategy %s: %s video formats", name, video_count)
+                logger.info("Strategy %s: %s video formats", name, video_count)
                 if video_count > best_count:
                     best_count = video_count
                     best_info = info
-                    best_source = f"no-proxy/{name}"
+                    best_source = name
                 if video_count >= 3:
-                    break  # Good enough
-
-        # If no formats without proxy, try WITH proxy
-        if best_count < 2:
-            for strategy in strategies:
-                opts = self._build_opts(use_proxy=True, strategy=strategy)
-                info = self._extract_with_opts(url, opts)
-                if info:
-                    raw_formats = info.get("formats", [])
-                    video_count = sum(
-                        1 for f in raw_formats
-                        if f.get("vcodec") not in (None, "none") and f.get("url")
-                    )
-                    name = str(strategy.get("extractor_args", {}).get("youtube", {}).get("player_client", "auto"))
-                    logger.info("Proxy strategy %s: %s video formats", name, video_count)
-                    if video_count > best_count:
-                        best_count = video_count
-                        best_info = info
-                        best_source = f"proxy/{name}"
+                    break  # Good enough, stop hammering YouTube
+            # Small random delay between strategies to avoid rate limiting
+            time.sleep(random.uniform(0.5, 1.5))
 
         if best_info is None:
             raise ValueError("All extraction strategies failed")
